@@ -48,7 +48,7 @@ class strategy:
         if(verbose>0):
             print("Running test")
 
-        self.__startingIndex = data.output().shape[0]-2
+        self.__startingIndex = data.data.shape[0]-2
         self.__startingCapital = startingCapital
         self.currentCapital = startingCapital
         self.__currentIndex = self.__startingIndex
@@ -62,7 +62,6 @@ class strategy:
             self.__fundamentalsNumber = None
         else:
             self.__fundamentalsNumber = data.fundamentals.shape[0]-1
-
 
         if(feeType==None or (feeType.upper()!="PERCENTAGE" and feeType.upper()!="FLAT")):
             if(overDraft==True):

@@ -906,9 +906,6 @@ class dataloader:
             if(col != "DATE" and col != "OPEN" and col != "HIGH" and col != "LOW" and col != "CLOSE" and col != "VOLUME"):
                 self.__precomputed.append(col)
 
-    # Function role: returns the data in the dataloader
-    def output(self):
-        return self.data
 
     # Function role: returns the info in the dataloader
     def info(self, verbose=None):
@@ -981,7 +978,7 @@ class dataloader:
                 else:
                     sum = 0
                     xsum = 0
-                    data=self.output()[index:index+days]
+                    data=self.data[index:index+days]
                     for x in range(index,index+days):
                         sum = sum + data[type][x]*(days+index-x)
                         xsum = xsum + (x - index + 1)
@@ -993,7 +990,7 @@ class dataloader:
             else:
                 sum = 0
                 xsum = 0
-                data=self.output()[index:index+days]
+                data=self.data[index:index+days]
                 for x in range(index,index+days):
                     sum = sum + data[type][x]*(days+index-x)
                     xsum = xsum + (x - index + 1)
