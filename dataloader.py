@@ -18,7 +18,6 @@ import time
 import datetime
 
 
-  
 class dataloader:
     # Checks some things:
     # -if the source of data is given and is supported
@@ -51,7 +50,7 @@ class dataloader:
             self.__load_ALPHAVANTAGE(apiKey, dataType, instrument)
         if(source=="preloaded"):
             self.__load()
-# fvdbsnam,
+
     # Function role: Loads data from alphavantage api
     # Checks some things:
     # -Checks that an api key is given
