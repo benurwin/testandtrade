@@ -16,7 +16,15 @@ import intrinio_sdk
 from intrinio_sdk.rest import ApiException
 import time
 import datetime
+from os import listdir, path
 
+def preloaded():
+    if(path.exists("dataloaders")):
+        list = listdir("dataloaders")
+        list = [x[0:len(x)-15] for x in list]
+        return list
+    else:
+        return None
 
 class dataloader:
     # Checks some things:
@@ -252,7 +260,6 @@ class dataloader:
             from pathos.multiprocessing import ProcessingPool as Pool
             import multiprocessing
             pool = Pool()
-
             found = False
 
             if(indicator == "EMA"):
@@ -410,6 +417,7 @@ class dataloader:
                 raise ValueError( indicator + " is not a recognised indicator for use in precompute")
 
             self.__precomputed = self.get_PRECOMPUTED_INDICATORS()
+
         else:
 
             if((indicator + str(self.days) + self.type + self.funct + str(self.slow) + str(self.fast)).upper() in self.__precomputed):
@@ -657,6 +665,7 @@ class dataloader:
             print(out)
         return out
 
+
     # Function role: Helper function for __load_LOCAL  (Sorts the dates into the required format using one conversion to avoid confusion of pd.to_datetime())
     def __sortDate(self,newDates1):
         warnings.filterwarnings('ignore', '.*.*',)
@@ -821,7 +830,8 @@ class dataloader:
         self.fundamentals = df
 
     # Function role: cleans the data with option to remove zero values and very low values
-    def clean(self, nans=True, zerosAndLows=0, verbose=None):
+    def clean(self, nans=True, zerosAndLows=True, verbose=None):
+        cutOff=0.05
         if(verbose==None):
             verbose=self.__verbose
         if(verbose>0):
@@ -832,10 +842,10 @@ class dataloader:
                 x = self.data.shape[0] - (b + 1)
                 if(nans==True and cols[y]!="DATE" and cols[y]!="VOLUME"and cols[y] not in self.__precomputed):
                     self.data.at[x, cols[y]] = self.__sortNan(cols[y], x, -1)
-                if(zerosAndLows!=0 and cols[y]!="DATE" and cols[y]!="VOLUME"and cols[y] not in self.__precomputed and x<self.data.shape[0]-2):
-                    self.data.at[x, cols[y]] = self.__sortZeros(cols[y], x, 1, zerosAndLows)
-                elif(zerosAndLows!=0 and cols[y]!="DATE" and cols[y]!="VOLUME"and cols[y] not in self.__precomputed and x<self.data.shape[0]-1):
-                    self.data.at[x, cols[y]] = self.__sortZeros(cols[y], x, -1, zerosAndLows)
+                if(zerosAndLows==True and cols[y]!="DATE" and cols[y]!="VOLUME"and cols[y] not in self.__precomputed and x<self.data.shape[0]-2):
+                    self.data.at[x, cols[y]] = self.__sortZeros(cols[y], x, 1, cutOff)
+                elif(zerosAndLows==True and cols[y]!="DATE" and cols[y]!="VOLUME"and cols[y] not in self.__precomputed and x<self.data.shape[0]-1):
+                    self.data.at[x, cols[y]] = self.__sortZeros(cols[y], x, -1, cutOff)
         for y in range(1,self.data.shape[1]-1):
             if(self.data[cols[y]][self.data.shape[0]-1]==0 and cols[y]!="Date" and cols[y]!="Volume" and cols[y] not in self.__precomputed):
                 self.data[cols[y]][self.data.shape[0]-1] = self.data[cols[y]][self.data.shape[0]-2]
@@ -856,15 +866,15 @@ class dataloader:
             return self.data[colName][index]
 
     # Function role: Helper function for clean()
-    def __sortZeros(self, colName, index, upOrDown, zerosAndLows):
-        if(self.data[colName][index]==0 or self.data[colName][index]<self.data[colName][index+1]/zerosAndLows):
+    def __sortZeros(self, colName, index, upOrDown, cutOff):
+        if(self.data[colName][index]==0 or self.data[colName][index]<self.data[colName][index+1]*cutOff):
             if(index<=self.data.shape[0]-1 and index>=0):
-                return self.__sortZeros(colName, index+upOrDown, upOrDown, zerosAndLows)
+                return self.__sortZeros(colName, index+upOrDown, upOrDown, cutOff)
             else:
                 if(index>self.data.shape[0]-2):
-                    return self.__sortZeros(colName, index-1, -1, zerosAndLows)
+                    return self.__sortZeros(colName, index-1, -1, cutOff)
                 if(index<1):
-                    return self.__sortZeros(colName, index+1, +1, zerosAndLows)
+                    return self.__sortZeros(colName, index+1, +1, cutOff)
         else:
             return self.data[colName][index]
 

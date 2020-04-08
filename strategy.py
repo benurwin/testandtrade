@@ -1,6 +1,5 @@
 from testandtrade.dataloader import dataloader
 # from cfd import cfd
-import plotly.graph_objects as go
 import numpy as np
 import math
 import sys
@@ -11,11 +10,18 @@ import inspect
 import warnings
 from types import MethodType
 import numbers
+from datetime import timedelta
+import matplotlib.pyplot as plt
+import pandas as pd
+from pandas.plotting import register_matplotlib_converters
+register_matplotlib_converters()
 
 class strategy:
 
     # Adds the functions for the stratergy
-    def __init__(self, stratName = "Stratergy", everyDayOpen=None, everyDayClose=None, everyWeek=None, everyMonth=None, everyYear=None, verbose=1):
+    def __init__(self, stratName, everyDayOpen=None, everyDayClose=None, everyWeek=None, everyMonth=None, everyYear=None, verbose=1):
+        if(type(stratName)!=str):
+            raise ValueError("stratName must be a string.")
         if(inspect.isfunction(everyDayOpen)!=True and everyDayOpen!=None):
             raise ValueError("everyDayOpen must be a function.")
         if(inspect.isfunction(everyDayClose)!=True and everyDayClose!=None):
@@ -37,7 +43,8 @@ class strategy:
         self.__original_dict__ = copy.deepcopy(self.__dict__)
 
     # Runs a test for the stratergy
-    def runTest(self, data=None, verbose=None, startingCapital=100000, plot=[], feeType=None, fee=None, overDraft=True):
+    def runTest(self, data=None, verbose=None, startingCapital=100000, plot=False, report=False, feeType=None, fee=None, overDraft=True):
+        # input checking
         if(verbose==None):
             verbose=self.__verbose
         if(type(data)!=dataloader):
@@ -45,9 +52,11 @@ class strategy:
         if(isinstance(startingCapital, numbers.Number)==False):
             raise ValueError("startingCapital must be a number.")
 
+
         if(verbose>0):
             print("Running test")
 
+        # initialise variables
         self.__startingIndex = data.data.shape[0]-2
         self.__startingCapital = startingCapital
         self.currentCapital = startingCapital
@@ -63,6 +72,7 @@ class strategy:
         else:
             self.__fundamentalsNumber = data.fundamentals.shape[0]-1
 
+        # sets up buy and sell functions
         if(feeType==None or (feeType.upper()!="PERCENTAGE" and feeType.upper()!="FLAT")):
             if(overDraft==True):
                 # Carries out a buy order
@@ -170,7 +180,6 @@ class strategy:
                             self.currentCapital = self.currentCapital + quantity*self.__testData.data["OPEN"][self.__currentIndex] - quantity*self.__testData.data["OPEN"][self.__currentIndex]*fee
                     if(self.currentCapital<0.000001):
                         self.currentCapital = 0
-
         elif(feeType.upper()=="FLAT"):
             if(overDraft==True):
                 # Carries out a buy order
@@ -228,11 +237,10 @@ class strategy:
                             self.currentCapital = self.currentCapital + quantity*self.__testData.data["OPEN"][self.__currentIndex] - fee
                     if(self.currentCapital<0.000001):
                         self.currentCapital = 0
-
         self.buy = MethodType(buy, self)
         self.sell = MethodType(sell, self)
 
-
+        # sets up the functions to be ran each day
         functions = []
         if(self.__everyYear!=None):
             functions.append(self.__doYear)
@@ -244,24 +252,8 @@ class strategy:
             functions.append(self.__doDayOpen)
         if(self.__everyDayClose!=None):
             functions.append(self.__doDayClose)
-        if(plot!=[]):
-            self.__plotFunctions = []
-            found = False
 
-            # add ploting functions here
-            found = True
-            self.__strategyPlotData = np.zeros(self.__startingIndex+1)
-            def y(self):
-                self.__strategyPlotData[self.__currentIndex] = self.get_TOTALCAPITAL()
-            self.__plotFunctions.append(y)
-            plot.append("Strategy")
-
-            def pltDataCollector(self):
-                # sets the value of the stuff to be plotted
-                self.__currentFunction = "do"
-                for plotFunct in self.__plotFunctions:
-                    plotFunct(self)
-
+        # progress bar set up
         if(verbose>0):
             self.__progressBarPoints = []
             self.__progressBarPointer = 0
@@ -279,21 +271,38 @@ class strategy:
                     sys.stdout.flush()
                     self.__progressBarPointer = self.__progressBarPointer + 1
 
-        if(len(plot)>0):
+        # runs the test
+        if(plot==True or report==True or self.testMode==True):
+            stratData = []
+            buyPoints = []
             if(verbose>0):
                 while(self.__currentIndex>=0):
                     progressBar(self)
-                    pltDataCollector(self)
+                    stock = self.currentStockPossition
                     for funct in functions:
                         funct()
-                    # do plotting assignmets
+                    if(stock==self.currentStockPossition):
+                        buyPoints.append("")
+                    elif(stock<self.currentStockPossition):
+                        buyPoints.append("B")
+                    else:
+                        buyPoints.append("S")
+                    self.__currentFunction="dc"
+                    stratData.append(self.get_TOTALCAPITAL())
                     self.__currentIndex = self.__currentIndex - 1
             else:
                 while(self.__currentIndex>=0):
-                    pltDataCollector(self)
+                    stock = self.currentStockPossition
                     for funct in functions:
                         funct()
-                    # do plotting assignmets
+                    if(stock==self.currentStockPossition):
+                        buyPoints.append("")
+                    elif(stock<self.currentStockPossition):
+                        buyPoints.append("B")
+                    else:
+                        buyPoints.append("S")
+                    self.__currentFunction="dc"
+                    stratData.append(self.get_TOTALCAPITAL())
                     self.__currentIndex = self.__currentIndex - 1
         else:
             if(verbose>0):
@@ -313,15 +322,15 @@ class strategy:
         if(verbose!=0):
             print()
 
-        if(plot!=[] and self.testMode==False):
-            thread1 = threading.Thread(target = self.__plot, args = (plot,self.__testData,self.__strategyPlotData/self.__startingCapital))
-            thread1.start()
+        # spins up another thread to handle the plotting and reporting
+        if((plot==True or report==True) and self.testMode==False):
+            self.__plot(stratData, self.__testData, buyPoints, plot, report)
 
 
         if(self.testMode==True):
-            holder = self.__strategyPlotData
+            holder = stratData[::-1]
         else:
-            self.__currentIndex = self.__currentIndex + 1
+            self.__currentIndex = self.__currentIndex + 1           #because of df having a zero index
             holder = self.get_TOTALCAPITAL()/self.__startingCapital
 
         # Clear all data so it can be ran again
@@ -329,59 +338,54 @@ class strategy:
         self.__original_dict__ = copy.deepcopy(self.__dict__)
         return holder
 
+
     # helper function of runTest that plots data in a dash app
-    def __plot(self, plot, dataloader, plotData):
-        from testandtrade.strategyDashApp import Launch
-        labels = []
-        data = []
-        dates = dataloader.data["DATE"][:dataloader.data.shape[0]-1]
-        if("All" in plot):
-            for col in dataloader.data.columns:
-                if(col!="DATE"):
-                    if(col=="HIGH" or col=="LOW" or col=="OPEN" or col=="CLOSE"):
-                        labels.append(col)
-                        data.append(dataloader.data[col][:dataloader.data.shape[0]-1].values/dataloader.data["OPEN"][dataloader.data.shape[0]-2])
-                    elif(col=="VOLUME"):
-                        labels.append(col)
-                        max=0
-                        for x in range (0, dataloader.data.shape[0]-1):
-                            if(dataloader.data["VOLUME"][x]>max):
-                                max = dataloader.data[col][x]
-                        out = dataloader.data["VOLUME"][:dataloader.data.shape[0]-1].values/max
-                        for x in range(0,out.shape[0]):
-                            out[x] = out[x]*dataloader.data["OPEN"][x]/dataloader.data["OPEN"][dataloader.data.shape[0]-2]
-                        data.append(out)
-                    else:
-                        labels.append(col)
-                        data.append(dataloader.data[col][:dataloader.data.shape[0]-1].values/dataloader.data["OPEN"][dataloader.data.shape[0]-2])
+    def __plot(self, stratData, testData, buyPoints, plot, report):
 
-            labels.append("Strategy")
-            data.append(plotData)
-        else:
-            for col in dataloader.data.columns:
-                if col in plot:
-                    if("Strategy"==col):
-                        labels.append("Strategy")
-                        data.append(plotData)
-                    elif(col=="HIGH" or col=="LOW" or col=="OPEN" or col=="CLOSE"):
-                        labels.append(col)
-                        data.append(dataloader.data[col][:dataloader.data.shape[0]-1].values/dataloader.data["OPEN"][dataloader.data.shape[0]-2])
-                    elif(col=="VOLUME"):
-                        labels.append(col)
-                        max=0
-                        for x in range (0, dataloader.data.shape[0]-1):
-                            if(dataloader.data["VOLUME"][x]>max):
-                                max = dataloader.data[col][x]
-                        out = dataloader.data["VOLUME"][:dataloader.data.shape[0]-1].values/max
-                        for x in range(0,out.shape[0]):
-                            out[x] = out[x]*dataloader.data["OPEN"][x]/dataloader.data["OPEN"][dataloader.data.shape[0]-2]
-                        data.append(out)
-                    else:
-                        labels.append(col)
-                        data.append(dataloader.data[col][:dataloader.data.shape[0]-1].values/dataloader.data["OPEN"][dataloader.data.shape[0]-2])
-        Launch(stratName = self.__stratName, labels = labels, data = data, dates = dates)
+        dates = list(testData.data["DATE"][:self.__startingIndex+1])
+        stockData = list(testData.data["CLOSE"][:self.__startingIndex+1])
+        stratData=stratData[::-1]
+        if(plot==True):
+            stratData[:] = [x / stratData[len(stockData)-1] for x in stratData]
+            stockData[:] = [x / stockData[len(stockData)-1] for x in stockData]
+            plt.plot(dates, stratData, '-', label=self.__stratName)
+            plt.plot(dates, stockData, '-', label=self.__testData.info()[0])
+            plt.legend()
+            plt.show()
+        if(report==True):
+            if(self.__isnotebook()==True):
+                import pyfolio as pf
+                stratData = stratData[::-1]
+                dates = dates[::-1]
+                stockData = stockData[::-1]
+                stratData[1:] = [(stratData[x] - stratData[x-1]) / stratData[x-1] for x in range(1,len(stratData))]
+                stratData[0] = 0
+                stockData[1:] = [(stockData[x] - stockData[x-1]) / stockData[x-1] for x in range(1,len(stockData))]
+                stockData[0] = 0
+                df1 = pd.DataFrame(stratData, dates)
+                df1= df1[0]
+                df2 = pd.DataFrame(stockData, dates)
+                df2= df2[0]
+                df2 = df2.rename(self.__testData.info()[0])
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    pf.create_full_tear_sheet(df1,benchmark_rets=df2)
+            else:
+                print("To generate a report testandtrade requires that the code be ran in a jupyter notebook.")
 
-# The following are helper functions for runTest
+    def __isnotebook(self):
+        try:
+            shell = get_ipython().__class__.__name__
+            if shell == 'ZMQInteractiveShell':
+                return True   # Jupyter notebook or qtconsole
+            elif shell == 'TerminalInteractiveShell':
+                return False  # Terminal running IPython
+            else:
+                return False  # Other type (?)
+        except NameError:
+            return False
+
+    # The following are helper functions for runTest
     def __doYear(self,a=1):
         if(self.__testData.data["DATE"][self.__currentIndex].year>self.__testData.data["DATE"][self.__currentIndex+1].year):
             self.__currentFunction = "y"
