@@ -1,3 +1,5 @@
+
+
 # TODO:
 # -do all technical indicators
 # -add functionality to add extra columns to the dataframe if you want
